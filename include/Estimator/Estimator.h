@@ -20,6 +20,7 @@
 #include "utils/ceresfunc.h"
 #include "IMUIntegrator/IMUIntegrator.h"
 #include <chrono>
+#include <thread>
 
 class Estimator{
 	typedef pcl::PointXYZINormal PointType;
