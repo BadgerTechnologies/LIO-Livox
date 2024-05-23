@@ -1023,3 +1023,48 @@ void LidarFeatureExtractor::FeatureExtract_Mid(pcl::PointCloud<pcl::PointXYZINor
             laserSurfFeature->push_back(p);
     }
 }
+
+void LidarFeatureExtractor::FeatureExtract_Hesai(pcl::PointCloud<pcl::PointXYZINormal>::Ptr &msg,
+                                                 pcl::PointCloud<PointType>::Ptr& laserConerFeature,
+                                                 pcl::PointCloud<PointType>::Ptr& laserSurfFeature) {
+    laserConerFeature->clear();
+    laserSurfFeature->clear();
+    for(auto & ptr : vlines) { ptr->clear(); }
+    for(auto & v : vcorner) { v.clear(); }
+    for(auto & v : vsurf) { v.clear(); }
+    int cloud_num = msg->points.size();
+    for(int i=0; i<cloud_num; ++i){
+        int line_idx = std::round(msg->points[i].normal_y);
+        msg->points[i].normal_z = _int_as_float(i);
+        vlines[line_idx]->push_back(msg->points[i]);
+
+        msg->points[i].normal_z = 0;
+    }
+
+    // TODO: redo with thread pool to reduce latency?
+    std::thread threads[N_SCANS];
+    for(int i=0; i<N_SCANS; ++i){
+        threads[i] = std::thread(&LidarFeatureExtractor::detectFeaturePoint, this, std::ref(vlines[i]),
+                                 std::ref(vcorner[i]), std::ref(vsurf[i]));
+    }
+    for(int i=0; i<N_SCANS; ++i){
+        threads[i].join();
+    }
+
+    for(int i=0; i<N_SCANS; ++i){
+        for(int j=0; j<vcorner[i].size(); ++j){
+            msg->points[_float_as_int(vlines[i]->points[vcorner[i][j]].normal_z)].normal_z = 1.0;
+        }
+        for(int j=0; j<vsurf[i].size(); ++j){
+            msg->points[_float_as_int(vlines[i]->points[vsurf[i][j]].normal_z)].normal_z = 2.0;
+        }
+    }
+    for(const auto& p : msg->points){
+        if(std::fabs(p.normal_z - 1.0) < 1e-5)
+            laserConerFeature->push_back(p);
+    }
+    for(const auto& p : msg->points){
+        if(std::fabs(p.normal_z - 2.0) < 1e-5)
+            laserSurfFeature->push_back(p);
+    }
+}

@@ -7,12 +7,16 @@ boost::shared_ptr<std::list<Estimator::LidarFrame>> lidarFrameList;
 pcl::PointCloud<PointType>::Ptr laserCloudFullRes;
 Estimator* estimator;
 
-ros::Publisher pubLaserOdometry;
+ros::Publisher pubLaserOdometry, pubLaserOdometry2;
 ros::Publisher pubLaserOdometryPath;
 ros::Publisher pubFullLaserCloud;
-tf::StampedTransform laserOdometryTrans;
+tf::Transform laserOdometryTrans;
+tf::StampedTransform laserOdometryTransInverted;
+geometry_msgs::PoseStamped basePose;
 tf::TransformBroadcaster* tfBroadcaster;
+tf::TransformListener* listener;
 ros::Publisher pubGps;
+ros::Subscriber subInitialOdom;
 
 bool newfullCloud = false;
 
@@ -45,8 +49,8 @@ void pubOdometry(const Eigen::Matrix4d& newPose, double& timefullCloud){
   Eigen::Matrix3d Rcurr = newPose.topLeftCorner(3, 3);
   Eigen::Quaterniond newQuat(Rcurr);
   Eigen::Vector3d newPosition = newPose.topRightCorner(3, 1);
-  laserOdometry.header.frame_id = "/world";
-  laserOdometry.child_frame_id = "/livox_frame";
+  laserOdometry.header.frame_id = "odom";
+  laserOdometry.child_frame_id = "base_footprint";
   laserOdometry.header.stamp = ros::Time().fromSec(timefullCloud);
   laserOdometry.pose.pose.orientation.x = newQuat.x();
   laserOdometry.pose.pose.orientation.y = newQuat.y();
@@ -57,33 +61,24 @@ void pubOdometry(const Eigen::Matrix4d& newPose, double& timefullCloud){
   laserOdometry.pose.pose.position.z = newPosition.z();
   pubLaserOdometry.publish(laserOdometry);
 
-  geometry_msgs::PoseStamped laserPose;
-  laserPose.header = laserOdometry.header;
-  laserPose.pose = laserOdometry.pose.pose;
-  laserOdoPath.header.stamp = laserOdometry.header.stamp;
-  laserOdoPath.poses.push_back(laserPose);
-  laserOdoPath.header.frame_id = "/world";
-  pubLaserOdometryPath.publish(laserOdoPath);
+  // sync with initial /odom (warning: may not working be working)
+  tf::Quaternion laserQuat, baseQuat;
+  quaternionMsgToTF(basePose.pose.orientation, baseQuat);
+  quaternionMsgToTF(laserOdometry.pose.pose.orientation, laserQuat);
+  laserQuat *= baseQuat;
+  quaternionTFToMsg(laserQuat, laserOdometry.pose.pose.orientation);
+  laserOdometry.pose.pose.position.x += basePose.pose.position.x;
+  laserOdometry.pose.pose.position.y += basePose.pose.position.y;
+  laserOdometry.pose.pose.position.z += basePose.pose.position.z;
+  pubLaserOdometry2.publish(laserOdometry);
 
-  laserOdometryTrans.frame_id_ = "/world";
-  laserOdometryTrans.child_frame_id_ = "/livox_frame";
-  laserOdometryTrans.stamp_ = ros::Time().fromSec(timefullCloud);
   laserOdometryTrans.setRotation(tf::Quaternion(newQuat.x(), newQuat.y(), newQuat.z(), newQuat.w()));
   laserOdometryTrans.setOrigin(tf::Vector3(newPosition.x(), newPosition.y(), newPosition.z()));
-  tfBroadcaster->sendTransform(laserOdometryTrans);
-
-	gps.header.stamp = ros::Time().fromSec(timefullCloud);
-	gps.header.frame_id = "world";
-	gps.latitude = newPosition.x();
-	gps.longitude = newPosition.y();
-	gps.altitude = newPosition.z();
-	gps.position_covariance = {
-					Rcurr(0, 0), Rcurr(1, 0), Rcurr(2, 0),
-					Rcurr(0, 1), Rcurr(1, 1), Rcurr(2, 1),
-					Rcurr(0, 2), Rcurr(1, 2), Rcurr(2, 2)
-	};
-	pubGps.publish(gps);
-
+  laserOdometryTransInverted.setData(laserOdometryTrans.inverse());
+  laserOdometryTransInverted.frame_id_ = "base_footprint";
+  laserOdometryTransInverted.child_frame_id_ = "odom_livox";
+  laserOdometryTransInverted.stamp_ = ros::Time().fromSec(timefullCloud);
+  tfBroadcaster->sendTransform(laserOdometryTransInverted);
 }
 
 void fullCallBack(const sensor_msgs::PointCloud2ConstPtr &msg){
@@ -376,9 +371,10 @@ void process(){
 	  std::unique_lock<std::mutex> lock_lidar(_mutexLidarQueue);
     if(!_lidarMsgQueue.empty()){
       // get new lidar msg
-      time_curr_lidar = _lidarMsgQueue.front()->header.stamp.toSec();
-      pcl::fromROSMsg(*_lidarMsgQueue.front(), *laserCloudFullRes);
-      _lidarMsgQueue.pop();
+      // instead of queuing, just use the latest scan and throw away the old ones!
+      time_curr_lidar = _lidarMsgQueue.back()->header.stamp.toSec();
+      pcl::fromROSMsg(*_lidarMsgQueue.back(), *laserCloudFullRes);
+      _lidarMsgQueue = {};
       newfullCloud = true;
     }
     lock_lidar.unlock();
@@ -510,7 +506,7 @@ void process(){
       }
       sensor_msgs::PointCloud2 laserCloudMsg;
       pcl::toROSMsg(*laserCloudAfterEstimate, laserCloudMsg);
-      laserCloudMsg.header.frame_id = "/world";
+      laserCloudMsg.header.frame_id = "odom";
       laserCloudMsg.header.stamp.fromSec(lidar_list->front().timeStamp);
       pubFullLaserCloud.publish(laserCloudMsg);
 
@@ -565,6 +561,20 @@ void process(){
   }
 }
 
+void initialOdomCallback(const boost::shared_ptr<nav_msgs::Odometry const>& odom) {
+  basePose.pose = odom->pose.pose;
+  ROS_INFO_STREAM("base pose:");
+  ROS_INFO_STREAM("x=" << basePose.pose.position.x);
+  ROS_INFO_STREAM("y=" << basePose.pose.position.y);
+  ROS_INFO_STREAM("z=" << basePose.pose.position.z);
+  ROS_INFO_STREAM("base orientation:");
+  ROS_INFO_STREAM("x=" << basePose.pose.orientation.x);
+  ROS_INFO_STREAM("y=" << basePose.pose.orientation.y);
+  ROS_INFO_STREAM("z=" << basePose.pose.orientation.z);
+  ROS_INFO_STREAM("w=" << basePose.pose.orientation.w);
+  subInitialOdom.shutdown();
+}
+
 int main(int argc, char** argv)
 {
   ros::init(argc, argv, "PoseEstimation");
@@ -595,7 +605,7 @@ int main(int argc, char** argv)
   ros::Subscriber subFullCloud = nodeHandler.subscribe<sensor_msgs::PointCloud2>("/livox_full_cloud", 10, fullCallBack);
   ros::Subscriber sub_imu;
   if(IMU_Mode > 0)
-    sub_imu = nodeHandler.subscribe("/livox/imu", 2000, imu_callback, ros::TransportHints().unreliable());
+    sub_imu = nodeHandler.subscribe("/imu/safetybox/imu_cal", 2000, imu_callback);
   if(IMU_Mode < 2)
     WINDOWSIZE = 1;
   else
@@ -603,10 +613,13 @@ int main(int argc, char** argv)
 
   pubFullLaserCloud = nodeHandler.advertise<sensor_msgs::PointCloud2>("/livox_full_cloud_mapped", 10);
   pubLaserOdometry = nodeHandler.advertise<nav_msgs::Odometry> ("/livox_odometry_mapped", 5);
+  pubLaserOdometry2 = nodeHandler.advertise<nav_msgs::Odometry> ("/livox_odometry_mapped2", 5);
   pubLaserOdometryPath = nodeHandler.advertise<nav_msgs::Path> ("/livox_odometry_path_mapped", 5);
 	pubGps = nodeHandler.advertise<sensor_msgs::NavSatFix>("/lidar", 1000);
 
   tfBroadcaster = new tf::TransformBroadcaster();
+  listener = new tf::TransformListener();
+  subInitialOdom = nodeHandler.subscribe<nav_msgs::Odometry>("/odom", 10, initialOdomCallback);
 
   laserCloudFullRes.reset(new pcl::PointCloud<PointType>);
   estimator = new Estimator(filter_parameter_corner, filter_parameter_surf);

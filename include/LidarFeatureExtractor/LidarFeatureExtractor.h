@@ -1,6 +1,7 @@
 #ifndef LIO_LIVOX_LIDARFEATUREEXTRACTOR_H
 #define LIO_LIVOX_LIDARFEATUREEXTRACTOR_H
 #include <ros/ros.h>
+#include <pcl_ros/transforms.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_cloud.h>
@@ -65,6 +66,9 @@ public:
     void FeatureExtract_Mid(pcl::PointCloud<pcl::PointXYZINormal>::Ptr &msg,
                                                    pcl::PointCloud<PointType>::Ptr& laserConerFeature,
                                                    pcl::PointCloud<PointType>::Ptr& laserSurfFeature);
+    void FeatureExtract_Hesai(pcl::PointCloud<pcl::PointXYZINormal>::Ptr &msg,
+                              pcl::PointCloud<PointType>::Ptr& laserConerFeature,
+                             pcl::PointCloud<PointType>::Ptr& laserSurfFeature);
 private:
     /** \brief lines used to extract lidar features */
     const int N_SCANS;

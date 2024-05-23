@@ -894,7 +894,11 @@ void Estimator::EstimateLidarPose(std::list<LidarFrame>& lidarFrameList,
   }
   if ( ((laserCloudCornerFromMapNum >= 0 && laserCloudSurfFromMapNum > 100) || 
        (laserCloudCornerFromLocalNum >= 0 && laserCloudSurfFromLocalNum > 100))) {
+    auto start1 = std::chrono::high_resolution_clock::now();
     Estimate(lidarFrameList, exTlb, gravity);
+    auto stop1 = std::chrono::high_resolution_clock::now();
+    auto duration1 = std::chrono::duration_cast<std::chrono::microseconds>(stop1 - start1);
+    ROS_INFO_STREAM(duration1.count() << " us...");
   }
 
   transformTobeMapped = Eigen::Matrix4d::Identity();

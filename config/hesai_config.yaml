@@ -1,0 +1,17 @@
+%YAML:1.0
+
+
+# switches
+Lidar_Type: 3   # 2=mid360, 3=hesai
+Used_Line: 16    # number of laser scan lines being used
+Feature_Mode: 0    # 0(false) or 1(true) THIS IS IGNORED
+NumCurvSize: 2
+DistanceFaraway: 20 # [m]  <DistanceFaraway near / >DistanceFaraway far
+NumFlat: 3 # nums of one part's flat featurel
+PartNum: 100 # nums of one scan's parts
+FlatThreshold: 0.02 # cloud curvature threshold of flat feature
+BreakCornerDis: 1 # break distance of break points
+LidarNearestDis: 1.0 # if(depth < LidarNearestDis) do not use this point 
+KdTreeCornerOutlierDis: 0.2 # corner filter threshold
+Use_seg: 0 # use segment algorithm
+map_skip_frame: 2

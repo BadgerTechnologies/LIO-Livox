@@ -1,11 +1,20 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(lio_livox)
 
-SET(CMAKE_BUILD_TYPE "Release")
+# SET(CMAKE_BUILD_TYPE "Release")
 set(CMAKE_CXX_STANDARD 17)
 
 #SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
 SET(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+
+# Large warnings are printed when compiling:
+#   "The practice of declaring the Bind placeholders (_1, _2, ...) in the
+#    global namespace is deprecated. Please use <boost/bind/bind.hpp> + using
+#    namespace boost::placeholders, or define BOOST_BIND_GLOBAL_PLACEHOLDERS
+#    to retain the current behavior."
+# These warnings come from ROS (noetic) files that we do not want to modify
+# and make it difficult to find other compile errors during development.
+add_definitions(-DBOOST_BIND_GLOBAL_PLACEHOLDERS)
 
 find_package(catkin REQUIRED COMPONENTS
   	     message_generation
@@ -63,5 +72,17 @@ add_executable (PoseEstimation
 		src/lio/Map_Manager.cpp)
 target_link_libraries(PoseEstimation ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${CERES_LIBRARIES})
 
+### Install
 
+install(TARGETS
+  ScanRegistration
+  PoseEstimation
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+install(DIRECTORY launch config
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+)
 
