@@ -17,44 +17,6 @@ int N_SCANS = 6;
 bool Feature_Mode = false;
 bool Use_seg = false;
 
-void lidarCallBackHorizon(const livox_ros_driver::CustomMsgConstPtr &msg) {
-
-  sensor_msgs::PointCloud2 msg2;
-
-  if(Use_seg){
-    lidarFeatureExtractor->FeatureExtract_with_segment(msg, laserCloud, laserConerCloud, laserSurfCloud, laserNonFeatureCloud, msg2,N_SCANS);
-  }
-  else{
-    lidarFeatureExtractor->FeatureExtract(msg, laserCloud, laserConerCloud, laserSurfCloud,N_SCANS,Lidar_Type);
-  } 
-
-  sensor_msgs::PointCloud2 laserCloudMsg;
-  pcl::toROSMsg(*laserCloud, laserCloudMsg);
-  laserCloudMsg.header = msg->header;
-  laserCloudMsg.header.stamp.fromNSec(msg->timebase+msg->points.back().offset_time);
-  pubFullLaserCloud.publish(laserCloudMsg);
-
-}
-
-void lidarCallBackHAP(const livox_ros_driver::CustomMsgConstPtr &msg) {
-
-  sensor_msgs::PointCloud2 msg2;
-
-  if(Use_seg){
-    lidarFeatureExtractor->FeatureExtract_with_segment_hap(msg, laserCloud, laserConerCloud, laserSurfCloud, laserNonFeatureCloud, msg2,N_SCANS);
-  }
-  else{
-    lidarFeatureExtractor->FeatureExtract_hap(msg, laserCloud, laserConerCloud, laserSurfCloud, laserNonFeatureCloud, N_SCANS);
-  } 
-
-  sensor_msgs::PointCloud2 laserCloudMsg;
-  pcl::toROSMsg(*laserCloud, laserCloudMsg);
-  laserCloudMsg.header = msg->header;
-  laserCloudMsg.header.stamp.fromNSec(msg->timebase+msg->points.back().offset_time);
-  pubFullLaserCloud.publish(laserCloudMsg);
-
-}
-
 void lidarCallBackPc2(const sensor_msgs::PointCloud2ConstPtr &msg) {
     pcl::PointCloud<pcl::PointXYZI>::Ptr laser_cloud(new pcl::PointCloud<pcl::PointXYZI>());
     pcl::PointCloud<pcl::PointXYZINormal>::Ptr laser_cloud_custom(new pcl::PointCloud<pcl::PointXYZINormal>());
@@ -130,15 +92,13 @@ int main(int argc, char** argv)
 
   if (Lidar_Type == 0)
   {
-    customCloud = nodeHandler.subscribe<livox_ros_driver::CustomMsg>("/livox/lidar", 100, &lidarCallBackHorizon);
   }
   else if (Lidar_Type == 1)
   {
-    customCloud = nodeHandler.subscribe<livox_ros_driver::CustomMsg>("/livox/lidar", 100, &lidarCallBackHAP);
   }
   else if(Lidar_Type==2){
       if (msg_type==0)
-          customCloud = nodeHandler.subscribe<livox_ros_driver::CustomMsg>("/livox/lidar", 100, &lidarCallBackHorizon);
+          ;
       else if(msg_type==1)
           pc2Cloud=nodeHandler.subscribe<sensor_msgs::PointCloud2>("/livox/lidar", 100, &lidarCallBackPc2);
   }
